@@ -2,7 +2,7 @@ namespace BotIdeias;
 
 // Tudo vem de variáveis de ambiente (Container App), nunca do código. Nomes com "__" viram ":" no .NET:
 //   Telegram__BotToken, Telegram__WebhookSecret, Telegram__ChatIds
-//   AzureOpenAI__Endpoint, AzureOpenAI__ApiKey, AzureOpenAI__Deployment (opcional: AzureOpenAI__ApiVersion)
+//   AzureOpenAI__Endpoint, AzureOpenAI__ApiKey, AzureOpenAI__Deployment (opcionais: AzureOpenAI__ApiVersion, AzureOpenAI__DeploymentTranscricao)
 //   Storage__ConnectionString
 public class TelegramOpcoes
 {
@@ -25,6 +25,11 @@ public class AzureOpenAiOpcoes
     public string? ApiKey { get; set; }
     public string? Deployment { get; set; }
     public string ApiVersion { get; set; } = "2025-04-01-preview";
+    // Opcional: deployment de transcrição (ex.: gpt-4o-transcribe). Sem ele, áudios não são aceitos.
+    public string? DeploymentTranscricao { get; set; }
+
+    public bool TranscricaoConfigurada =>
+        Configurado && !string.IsNullOrWhiteSpace(DeploymentTranscricao);
 
     public bool Configurado =>
         !string.IsNullOrWhiteSpace(Endpoint) && !string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(Deployment);

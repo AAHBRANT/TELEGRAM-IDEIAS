@@ -21,6 +21,11 @@ builder.Services.AddSingleton<IAnalisadorIdeias>(sp =>
     sp.GetRequiredService<IOptions<AzureOpenAiOpcoes>>().Value.Configurado
         ? sp.GetRequiredService<AnalisadorAzureOpenAi>()
         : new AnalisadorLocal());
+builder.Services.AddHttpClient<TranscritorAzureOpenAi>(c => c.Timeout = TimeSpan.FromSeconds(90));
+builder.Services.AddSingleton<ITranscritor>(sp =>
+    sp.GetRequiredService<IOptions<AzureOpenAiOpcoes>>().Value.TranscricaoConfigurada
+        ? sp.GetRequiredService<TranscritorAzureOpenAi>()
+        : new TranscritorIndisponivel());
 builder.Services.AddScoped<ProcessadorMensagem>();
 
 var app = builder.Build();

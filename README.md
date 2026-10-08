@@ -78,3 +78,9 @@ fixado, deixe o bot como administrador.
 - Sem edição/exclusão de ideias pelo bot (por ora).
 - Não lê fotos nem arquivos; só texto (e legenda).
 - Painel e respostas são texto simples (sem formatação).
+
+## Áudios (opcional)
+
+Crie um deployment de transcrição no mesmo recurso Azure OpenAI (ex.: `gpt-4o-transcribe`) e defina
+`AzureOpenAI__DeploymentTranscricao` com o nome dele. Sem essa variável, o bot avisa que não ouve áudios.
+Limite: 3 minutos / 20 MB por áudio.

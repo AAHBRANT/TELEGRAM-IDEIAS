@@ -12,9 +12,11 @@ public class ProcessadorMensagem
     internal const int TamanhoMinimo = 15;
     internal const int ContextoParaIa = 120;
     internal const int LimitePainel = 400;
+    internal const int DuracaoMaximaAudioSeg = 180;
+    internal const long TamanhoMaximoAudioBytes = 20 * 1024 * 1024;
 
     internal const string Ajuda =
-        "Banco de Ideias — escreva sua ideia aqui, do jeito que vier. Eu registro, analiso e organizo.\n\n" +
+        "Banco de Ideias — escreva ou grave um áudio com sua ideia, do jeito que vier. Eu registro, analiso e organizo.\n\n" +
         "Exemplo: \"Seria bom o sistema avisar quando o material recebido for diferente do pedido.\"\n\n" +
         "Comandos:\n/painel — mostra a lista organizada (e fixa no chat)\n/ideia IDEIA-0001 — detalhes de uma ideia\n/ajuda — esta mensagem";
 
@@ -22,9 +24,11 @@ public class ProcessadorMensagem
     private readonly IAnalisadorIdeias _analisador;
     private readonly ITelegramCliente _telegram;
     private readonly TimeProvider _relogio;
+    private readonly ITranscritor _transcritor;
 
-    public ProcessadorMensagem(IRepositorioIdeias repo, IAnalisadorIdeias analisador, ITelegramCliente telegram, TimeProvider relogio)
+    public ProcessadorMensagem(IRepositorioIdeias repo, IAnalisadorIdeias analisador, ITelegramCliente telegram, TimeProvider relogio, ITranscritor? transcritor = null)
     {
+        _transcritor = transcritor ?? new TranscritorIndisponivel();
         _repo = repo;
         _analisador = analisador;
         _telegram = telegram;
@@ -36,10 +40,19 @@ public class ProcessadorMensagem
         var m = update.Message;
         if (m?.Chat is null || m.From is null || m.From.IsBot) return;
         var texto = (m.Text ?? m.Caption ?? string.Empty).Trim();
-        if (texto.Length == 0) return;
+        var audio = m.Voice ?? m.Audio;
+        if (texto.Length == 0 && audio?.FileId is null) return;
 
         var chatId = m.Chat.Id;
         if (await _repo.JaTratadoAsync(chatId, update.UpdateId, ct)) return;
+
+        if (texto.Length == 0)
+        {
+            var transcrito = await TranscreverAsync(chatId, m.MessageId, audio!, ct);
+            if (transcrito is null) return;
+            await _telegram.EnviarAsync(chatId, $"🎙️ Entendi assim:\n\"{transcrito}\"", m.MessageId, ct);
+            texto = transcrito;
+        }
 
         if (texto.StartsWith('/'))
         {
@@ -54,6 +67,30 @@ public class ProcessadorMensagem
         }
 
         await RegistrarIdeiaAsync(chatId, m.MessageId, m.From.NomeExibicao, texto, ct);
+    }
+
+    // null = já respondi ao usuário explicando o problema.
+    private async Task<string?> TranscreverAsync(long chatId, long mensagemId, Midia audio, CancellationToken ct)
+    {
+        if (!_transcritor.Disponivel)
+        {
+            await _telegram.EnviarAsync(chatId, "Ainda não consigo ouvir áudios. Escreva a ideia em texto, por favor.", mensagemId, ct);
+            return null;
+        }
+        if (audio.Duration > DuracaoMaximaAudioSeg || audio.FileSize > TamanhoMaximoAudioBytes)
+        {
+            await _telegram.EnviarAsync(chatId, $"O áudio é longo demais. Envie até {DuracaoMaximaAudioSeg / 60} minutos, ou escreva a ideia.", mensagemId, ct);
+            return null;
+        }
+
+        var bytes = await _telegram.BaixarArquivoAsync(audio.FileId!, ct);
+        var texto = bytes is null ? null : await _transcritor.TranscreverAsync(bytes, "audio.ogg", ct);
+        if (string.IsNullOrWhiteSpace(texto))
+        {
+            await _telegram.EnviarAsync(chatId, "Não consegui entender o áudio. Tente gravar de novo ou escreva a ideia.", mensagemId, ct);
+            return null;
+        }
+        return texto.Trim();
     }
 
     private async Task RegistrarIdeiaAsync(long chatId, long mensagemId, string autor, string texto, CancellationToken ct)

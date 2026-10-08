@@ -50,6 +50,28 @@ public class TelegramCliente : ITelegramCliente
         return false;
     }
 
+    public async Task<byte[]?> BaixarArquivoAsync(string fileId, CancellationToken ct)
+    {
+        using var resp = await _http.PostAsJsonAsync(Url("getFile"), new Dictionary<string, object> { ["file_id"] = fileId }, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            _log.LogWarning("getFile falhou: {Status}", (int)resp.StatusCode);
+            return null;
+        }
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+        if (!doc.RootElement.TryGetProperty("result", out var res)
+            || !res.TryGetProperty("file_path", out var caminho) || caminho.GetString() is not { Length: > 0 } path)
+            return null;
+
+        using var arquivo = await _http.GetAsync($"https://api.telegram.org/file/bot{_opcoes.BotToken}/{path}", ct);
+        if (!arquivo.IsSuccessStatusCode)
+        {
+            _log.LogWarning("Download do arquivo falhou: {Status}", (int)arquivo.StatusCode);
+            return null;
+        }
+        return await arquivo.Content.ReadAsByteArrayAsync(ct);
+    }
+
     public async Task FixarAsync(long chatId, long mensagemId, CancellationToken ct)
     {
         try

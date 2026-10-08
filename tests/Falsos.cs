@@ -68,6 +68,9 @@ internal class TelegramFalso : ITelegramCliente
         return Task.FromResult(true);
     }
 
+    public byte[]? Arquivo { get; set; } = [1, 2, 3];
+    public Task<byte[]?> BaixarArquivoAsync(string fileId, CancellationToken ct) => Task.FromResult(Arquivo);
+
     public Task FixarAsync(long chatId, long mensagemId, CancellationToken ct) { Fixadas.Add(mensagemId); return Task.CompletedTask; }
 }
 
@@ -78,4 +81,11 @@ internal class AnalisadorFalso : IAnalisadorIdeias
     public Task<ResultadoAnalise> AnalisarAsync(string texto, IReadOnlyList<IdeiaResumida> existentes, int numeroNovo, CancellationToken ct)
         => Task.FromResult(Resposta?.Invoke(texto, existentes, numeroNovo)
             ?? new ResultadoAnalise(AnalisadorLocal.TituloDe(texto), "", "", "Geral", "Média", null, [], new Dictionary<int, string> { [numeroNovo] = "Geral" }, "IA"));
+}
+
+internal class TranscritorFalso : ITranscritor
+{
+    public bool Disponivel { get; set; } = true;
+    public string? Texto { get; set; }
+    public Task<string?> TranscreverAsync(byte[] audio, string nomeArquivo, CancellationToken ct) => Task.FromResult(Texto);
 }

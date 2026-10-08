@@ -16,6 +16,16 @@ public class Mensagem
     [JsonPropertyName("chat")] public Chat? Chat { get; set; }
     [JsonPropertyName("text")] public string? Text { get; set; }
     [JsonPropertyName("caption")] public string? Caption { get; set; }
+    [JsonPropertyName("voice")] public Midia? Voice { get; set; }
+    [JsonPropertyName("audio")] public Midia? Audio { get; set; }
+}
+
+// Mensagem de voz ou arquivo de áudio.
+public class Midia
+{
+    [JsonPropertyName("file_id")] public string? FileId { get; set; }
+    [JsonPropertyName("duration")] public int Duration { get; set; }
+    [JsonPropertyName("file_size")] public long? FileSize { get; set; }
 }
 
 public class Usuario

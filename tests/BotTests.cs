@@ -163,4 +163,49 @@ public class BotTests
         Assert.Equal("Alertas", r.Temas[2]);
         Assert.Null(RespostaIa.Interpretar("isto não é json", "texto", existentes, 2));
     }
+
+    private static Update Voz(long updateId, int duracao = 20)
+        => new() { UpdateId = updateId, Message = new Mensagem { MessageId = updateId, Chat = new Chat { Id = Chat }, From = new Usuario { Id = 7, FirstName = "Rafaela" }, Voice = new Midia { FileId = "abc", Duration = duracao } } };
+
+    private static (ProcessadorMensagem Proc, RepositorioMemoria Repo, TelegramFalso Tg) MontarComAudio(TranscritorFalso tr)
+    {
+        var repo = new RepositorioMemoria();
+        var tg = new TelegramFalso();
+        return (new ProcessadorMensagem(repo, new AnalisadorFalso(), tg, TimeProvider.System, tr), repo, tg);
+    }
+
+    [Fact]
+    public async Task Audio_E_Transcrito_E_Vira_Ideia()
+    {
+        var (proc, repo, tg) = MontarComAudio(new TranscritorFalso { Texto = "Seria bom avisar quando o EPI estiver vencido." });
+        await proc.ProcessarAsync(Voz(1), default);
+
+        var salvas = await repo.ListarAsync(Chat, 10, default);
+        Assert.Single(salvas);
+        Assert.Equal("Seria bom avisar quando o EPI estiver vencido.", salvas[0].Texto);
+        Assert.Contains(tg.Enviadas, e => e.Texto.StartsWith("🎙️ Entendi assim"));
+        Assert.Contains(tg.Enviadas, e => e.Texto.StartsWith("Ideia registrada!"));
+    }
+
+    [Fact]
+    public async Task Audio_Sem_Transcricao_Configurada_Avisa_E_Nao_Registra()
+    {
+        var (proc, repo, tg) = MontarComAudio(new TranscritorFalso { Disponivel = false });
+        await proc.ProcessarAsync(Voz(1), default);
+
+        Assert.Empty(await repo.ListarAsync(Chat, 10, default));
+        Assert.Contains(tg.Enviadas, e => e.Texto.Contains("Ainda não consigo ouvir áudios"));
+    }
+
+    [Fact]
+    public async Task Audio_Longo_Ou_Ininteligivel_Nao_Registra()
+    {
+        var (proc, repo, tg) = MontarComAudio(new TranscritorFalso { Texto = null });
+        await proc.ProcessarAsync(Voz(1, duracao: 600), default);
+        await proc.ProcessarAsync(Voz(2), default);
+
+        Assert.Empty(await repo.ListarAsync(Chat, 10, default));
+        Assert.Contains(tg.Enviadas, e => e.Texto.Contains("longo demais"));
+        Assert.Contains(tg.Enviadas, e => e.Texto.Contains("Não consegui entender"));
+    }
 }
