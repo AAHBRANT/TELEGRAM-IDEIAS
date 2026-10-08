@@ -1,0 +1,60 @@
+name: Bot de Ideias (build, testes e deploy)
+
+# Roda a cada PR e a cada push na main. O deploy é opcional: só acontece na main e se a variável de repositório
+# CONTAINERAPP_BOT_IDEIAS existir (nome do Container App do bot).
+#
+# Pré-requisitos (Settings > Secrets and variables > Actions DESTE repositório):
+#   Secrets:   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#              -> App Registration com credencial federada (OIDC) para ESTE repositório (ver README).
+#   Variables: AZURE_RESOURCE_GROUP, AZURE_ACR_NAME, CONTAINERAPP_BOT_IDEIAS
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: bot-ideias-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  testes:
+    name: Build + testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet test BotIdeias.sln --configuration Release
+
+  deploy:
+    name: Deploy do bot (opcional)
+    needs: testes
+    if: ${{ github.event_name != 'pull_request' && vars.CONTAINERAPP_BOT_IDEIAS != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Build & push da imagem
+        run: |
+          az acr build \
+            --registry "${{ vars.AZURE_ACR_NAME }}" \
+            --image "bot-ideias:${{ github.sha }}" \
+            --file Dockerfile \
+            .
+      - name: Atualizar o Container App do bot
+        run: |
+          az containerapp update \
+            --name "${{ vars.CONTAINERAPP_BOT_IDEIAS }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ vars.AZURE_ACR_NAME }}.azurecr.io/bot-ideias:${{ github.sha }}"
